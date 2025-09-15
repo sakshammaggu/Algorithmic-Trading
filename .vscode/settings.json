@@ -1,0 +1,6 @@
+{
+    "cmake.sourceDirectory": "D:/Algorithmic Trading/Algorithmic Trading/001-TradingEngineStructureMechanism/01-TradingEngineServer",
+    "files.associations": {
+        "iostream": "cpp"
+    }
+}
