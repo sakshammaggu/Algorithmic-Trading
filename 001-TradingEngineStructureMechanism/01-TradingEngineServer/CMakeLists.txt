@@ -8,5 +8,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/core/include)
 
 add_executable(TradingEngineServerExec
     core/src/Application.cpp
+    core/src/TradingEngineServer.cpp
     server/src/main.cpp
 )
