@@ -54,8 +54,8 @@ struct Order {
     double price;
     int quantity;
     
-    static double orderCounterBid; // Declare a static counter to keep track of the order number
-    static double orderCounterAsk; // Declare a static counter to keep track of the order number
+    static int orderCounterBid; // Declare a static counter to keep track of the order number
+    static int orderCounterAsk; // Declare a static counter to keep track of the order number
     int insertionOrderBid; // To keep track of the insertion order for BID orders. Order in which the order was inserted into the order book
     int insertionOrderAsk; // To keep track of the insertion order for ASK orders. Order in which the order was inserted into the order book
 
@@ -83,10 +83,10 @@ class OrderBook {
     OrderBook() {};
     ~OrderBook() {};
 
-    std::string addBid(std::string Username, int Price, int Quantity); // adds a bid or ask to the order book
-    std::string addAsk(std::string Username, int Price, int Quantity); // adds a bid or ask to the order book
-    void cancelBid(std::string Username, int Price, int Quantity); // cancels a bid or ask from the order book
-    void cancelAsk(std::string Username, int Price, int Quantity); // cancels a bid or ask from the order book
+    std::string addBid(std::string Username, double Price, int Quantity); // adds a bid or ask to the order book
+    std::string addAsk(std::string Username, double Price, int Quantity); // adds a bid or ask to the order book
+    void cancelBid(std::string Username, double Price, int Quantity); // cancels a bid or ask from the order book
+    void cancelAsk(std::string Username, double Price, int Quantity); // cancels a bid or ask from the order book
     std::string getBalance(std::string username); // returns the balance of a user
     std::string getQuote(int qty); // returns the best bid and ask prices and quantities
     std::string getDepth(); // returns the entire order book and shows all bids and asks
