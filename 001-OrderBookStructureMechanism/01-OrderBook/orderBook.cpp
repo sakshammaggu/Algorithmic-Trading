@@ -87,8 +87,74 @@ OrderBook::OrderBook() {
     bids.push_back(bid6);
 }
 
-std::string OrderBook::addBid(std::string Username, double Price, int Quantity) {
+std::string OrderBook::makeUser(std::string username) {
+    User newUser(username);
+    if (users.find(username) == users.end()) {
+        users[username] = newUser;
+        return "User " + username + " created successfully.";
+    } 
+    return "User " + username + " already exists.";
+}
 
+std::string OrderBook::addBid(std::string Username, double Price, int Quantity) {
+    /*
+        Implementation of adding a BID order to the order book.
+
+        We need to check if the username exists in the users array, then we compare the value of the bid with the lowest ask price, if bid is higher or equal to ask then we start flipping balances and traversing through ask array and bid quantity till condition is false, then if remQty > 0
+        we add the remaining quantity to the bids array else we return a message saying Bid Satisfied Successfully
+    */
+
+    // First check if the username exists in the users map
+    if (users.find(Username) == users.end()) {
+        return "Error: User " + Username + " does not exist.";
+    }
+
+    // Check if user has enough USD balance for the bid
+    if (users[Username].userBalance.balance["USD"] < Price * Quantity) {
+        return "Error: User " + Username + " does not have enough USD balance for this bid.";
+    }
+
+    int remQty = Quantity; // remaining quantity to be fulfilled
+
+    stable_sort(asks.begin(), asks.end(), [](const Order &a, const Order &b) {
+        // If prices are equal, maintain the original order
+        if (a.price == b.price) {
+            return a.insertionOrderAsk < b.insertionOrderAsk; // Earlier insertion order has higher priority
+        }
+        return a.price < b.price; // sort by price, Lower price has higher priority
+    });
+
+    for (auto it = asks.begin(); it != asks.end();) {
+        if (remQty > 0  && Price >= it->price) {
+            if (it->quantity > remQty) {
+                it->quantity -= remQty;
+                flipBalance(Username, it->userName, remQty, it->price);
+                cout << "Bid Satisfied Successfully at price: " << it->price << " and quantity: " << remQty << endl;
+                remQty = 0;
+                break;
+            } else {
+                remQty -= it->quantity;
+                flipBalance(Username, it->userName, it->quantity, it->price);
+                cout << "Bid Satisfied Partially at price: " << it->price << " and quantity: " << it->quantity << endl;
+                it = asks.erase(it); // Remove the ask order as it is completely fulfilled
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    if (remQty > 0) {
+        Order bid(Username, "bid", Price, remQty);
+        bids.push_back(bid);
+        cout << "Remaining quantity of bids added to Orderbook" << endl;
+    }
+
+    if (remQty == 0) {
+        cout << "Complete Bid Satisfied Successfully" << endl;
+    }
+
+    return "Bid added/satified successfully.";
+    
 }
 
 std::string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
@@ -112,10 +178,6 @@ std::string OrderBook::getQuote(int qty) {
 }
 
 std::string OrderBook::getDepth() {
-    
-}
-
-std::string OrderBook::makeUser(std::string username) {
     
 }
 
