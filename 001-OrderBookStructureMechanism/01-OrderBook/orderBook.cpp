@@ -170,7 +170,16 @@ void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
 }
 
 std::string OrderBook::getBalance(std::string username) {
-    
+    if (users.find(username) != users.end()) {
+        cout << "User found" << endl;
+        cout << "User balance is as follows: " << endl;
+        for (auto it = users[username].userBalance.balance.begin(); it != users[username].userBalance.balance.end(); ++it) {
+            cout << it->first << ": " << fixed << setprecision(2) << it->second << endl;
+        }
+        return "Balance retrieved successfully.";
+    } else {
+        return "User " + username + " does not exist.";
+    }
 }
 
 std::string OrderBook::getQuote(int qty) {
