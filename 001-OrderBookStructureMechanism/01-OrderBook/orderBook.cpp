@@ -210,10 +210,51 @@ std::string OrderBook::addAsk(std::string Username, double Price, int Quantity) 
 }
 
 void OrderBook::cancelBid(std::string Username, double Price, int Quantity) {
-    
+    for (auto it = bids.begin(); it != bids.end(); it++){
+        if (it->userName == Username && it->price == Price && it->quantity == Quantity) {
+            bids.erase(it);
+            cout << "Bid cancelled successfully!" << endl;
+            return;
+        } else if (it->userName == Username && it->price == Price && it->quantity > Quantity) {
+            it->quantity -= Quantity;
+            cout << "Bid cancelled successfully!" << endl;
+            return;
+        } else if (it->userName == Username && it->price == Price && it->quantity < Quantity) {
+            cout << "Cannot cancel more than existing quantity. Existing quantity is " << it->quantity << endl;
+            cout << "Bid quantity is less than the quantity you want to cancel." << endl;
+            cout << "Please enter the right quantity to cancel and retry!" << endl;
+            return;
+        }
+    }
+
+    cout << "Bid not found!! Please enter the right Username, Price and Quantity to cancel the bid!" << endl;
+    return;
 }
 
 void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
+    for (auto it = asks.begin(); it != asks.end(); it++){
+        if (it->userName == Username && it->price == Price && it->quantity == Quantity) {
+            asks.erase(it);
+            cout << "Ask cancelled successfully!" << endl;
+            return;
+        } else if (it->userName == Username && it->price == Price && it->quantity > Quantity) {
+            it->quantity -= Quantity;
+            cout << "Ask cancelled successfully!" << endl;
+            return;
+        } else if (it->userName == Username && it->price == Price && it->quantity < Quantity) {
+            cout << "Cannot cancel more than existing quantity. Existing quantity is " << it->quantity << endl;
+            cout << "Ask quantity is less than the quantity you want to cancel." << endl;
+            cout << "Please enter the right quantity to cancel and retry!" << endl;
+            return;
+        }
+    }
+}
+
+std::string OrderBook::getQuote(int qty) {
+    
+}
+
+std::string OrderBook::getDepth() {
     
 }
 
@@ -228,14 +269,6 @@ std::string OrderBook::getBalance(std::string username) {
     } else {
         return "User " + username + " does not exist.";
     }
-}
-
-std::string OrderBook::getQuote(int qty) {
-    
-}
-
-std::string OrderBook::getDepth() {
-    
 }
 
 std::string OrderBook::addBalance(std::string Username, std::string market, int value) {
