@@ -154,11 +154,59 @@ std::string OrderBook::addBid(std::string Username, double Price, int Quantity) 
     }
 
     return "Bid added/satified successfully.";
-    
 }
 
 std::string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
-    
+    // First check if the username exists in the users map
+    if (users.find(Username) == users.end()) {
+        return "Error: User " + Username + " does not exist.";
+    }
+
+    // Check if user has enough GOOGL balance for the ask
+    if (users[Username].userBalance.balance[TICKER] < Price * Quantity) {
+        return "Error: User " + Username + " does not have enough " + TICKER + " balance for this ask.";
+    }
+
+    int remQty = Quantity;
+
+    stable_sort(bids.begin(), bids.end(), [](const Order &a, const Order &b) {
+        // If prices are equal, maintain the original order
+        if (a.price == b.price) {
+            return a.insertionOrderBid < b.insertionOrderBid; // Earlier insertion order has higher priority
+        }
+        return a.price > b.price; // sort by price
+    });
+
+    for (auto it = bids.begin(); it != bids.end();) {
+        if (remQty > 0  && Price <= it->price) {
+            if (it->quantity > remQty) {
+                it->quantity -= remQty;
+                flipBalance(it->userName, Username, it->quantity, it->price);
+                cout << "Ask Satisfied Successfully at price: " << it->price << " and quantity: " << remQty << endl;
+                remQty = 0;
+                break;
+            } else {
+                remQty -= it->quantity;
+                flipBalance(it->userName, Username, it->quantity, it->price);
+                cout << "Ask Satisfied Partially at price: " << it->price << " and quantity: " << it->quantity << endl;
+                it = bids.erase(it); // get the next valid iterator after erasing
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    if (remQty > 0) {
+        Order ask(Username, "ask", Price, remQty);
+        asks.push_back(ask);
+        cout << "Remaining quantity of asks added to Orderbook" << endl;
+    }
+
+    if (remQty == 0) {
+        cout << "Complete Ask Satisfied Successfully" << endl;
+    }
+
+    return "Ask added successfully."; 
 }
 
 void OrderBook::cancelBid(std::string Username, double Price, int Quantity) {
