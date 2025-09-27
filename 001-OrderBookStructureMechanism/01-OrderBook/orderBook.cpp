@@ -239,7 +239,14 @@ std::string OrderBook::getDepth() {
 }
 
 std::string OrderBook::addBalance(std::string Username, std::string market, int value) {
-    
+    if (users.find(Username) != users.end()) {
+        users[Username].userBalance.addBalances(market, value);
+        cout << "Balance added successfully" << endl;
+        return "Balance added successfully";
+    }
+
+    cout << "User not found!! Please enter the right Username to add balance!" << endl;
+    return "User not found";
 }
 
 int main() {
