@@ -251,7 +251,33 @@ void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
 }
 
 string OrderBook::getQuote(int qty) {
-    
+    // Implementation of getQuote
+    // We will need to find lowest ask prices till the qty passed in is met we keep displaying lowest ask prices
+
+    stable_sort(asks.begin(), asks.end(), [](const Order &a, const Order &b) {
+        // If prices are equal, maintain the original order
+        if (a.price == b.price) {
+            return a.insertionOrderAsk < b.insertionOrderAsk; // Compare based on the order of insertion
+        }
+        return a.price < b.price;   // Otherwise, sort by price
+    });
+
+    for (auto it = asks.begin(); it != asks.end(); ++it){
+        if (qty > 0 && qty <= it->quantity) {
+            cout << TICKER << "-> "
+                 << "Quantity available: " << qty << " at " << it->price << " USD" << endl; // make the output look better
+            return "Quote retrieved successfully.";
+        } else if (qty > 0 && qty > it->quantity) {
+            cout << TICKER << "-> "
+                 << "Quantity available: " << it->quantity << " at " << it->price << " USD" << endl;
+            qty -= it->quantity;
+        } else {
+            return "Quote retrieved successfully.";
+        }
+    }
+
+    cout << "Quote retrieved successfully." << endl;
+    return "Quote retrieved successfully.";
 }
 
 string OrderBook::getDepth() {
