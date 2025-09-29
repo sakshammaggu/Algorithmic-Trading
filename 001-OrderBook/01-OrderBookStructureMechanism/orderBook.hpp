@@ -80,8 +80,8 @@ class OrderBook {
     void flipBalance(const std::string& userId1, const std::string& userId2, double quantity, double price);
 
     public:
-    OrderBook() {};
-    ~OrderBook() {};
+    OrderBook(); 
+    ~OrderBook() {}; 
 
     std::string addBid(std::string Username, double Price, int Quantity); // adds a bid or ask to the order book
     std::string addAsk(std::string Username, double Price, int Quantity); // adds a bid or ask to the order book

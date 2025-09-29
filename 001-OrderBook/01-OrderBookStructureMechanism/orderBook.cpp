@@ -8,6 +8,26 @@ using namespace std;
 int Order::orderCounterBid = 0; // Initialize the static counter for BID orders
 int Order::orderCounterAsk = 0; // Initialize the static counter for ASK orders
 
+/**
+ * @brief Executes a balance transfer between two users during a trade
+ * 
+ * @details This function handles the actual transaction between buyer and seller:
+ *          1. Transfers USD from buyer to seller
+ *          2. Transfers stocks from seller to buyer
+ *          3. Validates balances before transfer
+ * 
+ * @param userId1 The buyer's username (receiving stocks, paying USD)
+ * @param userId2 The seller's username (receiving USD, giving stocks)
+ * @param quantity Number of stocks to transfer
+ * @param price Price per stock for the transaction
+ * 
+ * @note Transaction will only proceed if:
+ *       - Both users exist
+ *       - Buyer has sufficient USD balance
+ *       - Seller has sufficient stock balance
+ * 
+ * @return void, but prints transaction status to console
+ */
 void OrderBook::flipBalance(const std::string& userId1, const std::string& userId2, double quantity, double price) {
     if (users.find(userId1) != users.end() && users.find(userId2) != users.end()) {
         if (users[userId1].userBalance.balance["USD"] >= quantity * price) {
@@ -35,6 +55,22 @@ void OrderBook::flipBalance(const std::string& userId1, const std::string& userI
 }
 
 // Implementation of OrderBook constructor
+/**
+ * @brief Constructor for the OrderBook class
+ * 
+ * @details Initializes the order book with three market makers and their initial positions:
+ *          1. Creates three market maker users (MM1, MM2, MM3)
+ *          2. Sets initial balances for each market maker
+ *          3. Places initial orders to create market liquidity
+ * 
+ * Initial setup:
+ * - MarketMaker1: 10000 USD, 1000 GOOGL
+ * - MarketMaker2: 10000 USD, 2000 GOOGL
+ * - MarketMaker3: 50000 USD, 0 GOOGL
+ * 
+ * @note This constructor establishes the initial market state with
+ *       a mix of bid and ask orders to ensure market liquidity
+ */
 OrderBook::OrderBook() {
     // User 1 with initial balance
     Balance balance1("USD", 10000.0);
@@ -87,6 +123,21 @@ OrderBook::OrderBook() {
     bids.push_back(bid6);
 }
 
+/**
+ * @brief Creates a new user in the trading system
+ * 
+ * @details Creates a new user with:
+ *          - Empty initial balances
+ *          - Unique username validation
+ * 
+ * @param username The desired username for the new user
+ * 
+ * @return string Status message indicating:
+ *         - Success: "User {username} created successfully"
+ *         - Failure: "User {username} already exists"
+ * 
+ * @note New users start with zero balance in all currencies/stocks
+ */
 string OrderBook::makeUser(std::string username) {
     User newUser(username);
     if (users.find(username) == users.end()) {
@@ -96,14 +147,32 @@ string OrderBook::makeUser(std::string username) {
     return "User " + username + " already exists.";
 }
 
+/**
+ * @brief Places a new bid (buy) order in the order book
+ * 
+ * @details Algorithm:
+ * 1. Validates user existence and USD balance
+ * 2. Sorts existing ask orders by price (ascending) and time priority
+ * 3. Matches against existing ask orders if possible:
+ *    - Fully matches and removes completed ask orders
+ *    - Partially matches and updates remaining quantities
+ * 4. Places remaining quantity as new bid if not fully matched
+ * 
+ * @param Username The username of the bidder
+ * @param Price The maximum price willing to pay per stock
+ * @param Quantity The number of stocks to buy
+ * 
+ * @return string Status message indicating:
+ *         - Error if user doesn't exist
+ *         - Error if insufficient USD balance
+ *         - Success message with trade details
+ * 
+ * @note 
+ * - Implements price-time priority matching
+ * - Matches at ask price, not bid price
+ * - Requires sufficient USD balance: Price * Quantity
+ */
 string OrderBook::addBid(std::string Username, double Price, int Quantity) {
-    /*
-        Implementation of adding a BID order to the order book.
-
-        We need to check if the username exists in the users array, then we compare the value of the bid with the lowest ask price, if bid is higher or equal to ask then we start flipping balances and traversing through ask array and bid quantity till condition is false, then if remQty > 0
-        we add the remaining quantity to the bids array else we return a message saying Bid Satisfied Successfully
-    */
-
     // First check if the username exists in the users map
     if (users.find(Username) == users.end()) {
         return "Error: User " + Username + " does not exist.";
@@ -156,6 +225,31 @@ string OrderBook::addBid(std::string Username, double Price, int Quantity) {
     return "Bid added/satified successfully.";
 }
 
+/**
+ * @brief Places a new ask (sell) order in the order book
+ * 
+ * @details Algorithm:
+ * 1. Validates user existence and stock balance
+ * 2. Sorts existing bid orders by price (descending) and time priority
+ * 3. Matches against existing bid orders if possible:
+ *    - Fully matches and removes completed bid orders
+ *    - Partially matches and updates remaining quantities
+ * 4. Places remaining quantity as new ask if not fully matched
+ * 
+ * @param Username The username of the seller
+ * @param Price The minimum price willing to accept per stock
+ * @param Quantity The number of stocks to sell
+ * 
+ * @return string Status message indicating:
+ *         - Error if user doesn't exist
+ *         - Error if insufficient stock balance
+ *         - Success message with trade details
+ * 
+ * @note 
+ * - Implements price-time priority matching
+ * - Matches at bid price, not ask price
+ * - Requires sufficient stock balance: Quantity
+ */
 string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
     // First check if the username exists in the users map
     if (users.find(Username) == users.end()) {
@@ -163,7 +257,7 @@ string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
     }
 
     // Check if user has enough GOOGL balance for the ask
-    if (users[Username].userBalance.balance[TICKER] < Price * Quantity) {
+    if (users[Username].userBalance.balance[TICKER] < Quantity) {
         return "Error: User " + Username + " does not have enough " + TICKER + " balance for this ask.";
     }
 
@@ -209,6 +303,24 @@ string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
     return "Ask added successfully."; 
 }
 
+/**
+ * @brief Cancels an existing bid order
+ * 
+ * @details Search and cancellation logic:
+ * 1. Searches for exact match (username, price, quantity)
+ * 2. If found with larger quantity, reduces the quantity
+ * 3. If found with smaller quantity, rejects cancellation
+ * 4. Removes order completely if quantities match
+ * 
+ * @param Username The username who placed the bid
+ * @param Price The price of the bid to cancel
+ * @param Quantity The quantity to cancel
+ * 
+ * @note 
+ * - Cannot cancel more than existing quantity
+ * - Requires exact match of all parameters
+ * - Prints status messages to console
+ */
 void OrderBook::cancelBid(std::string Username, double Price, int Quantity) {
     for (auto it = bids.begin(); it != bids.end(); it++){
         if (it->userName == Username && it->price == Price && it->quantity == Quantity) {
@@ -231,6 +343,24 @@ void OrderBook::cancelBid(std::string Username, double Price, int Quantity) {
     return;
 }
 
+/**
+ * @brief Cancels an existing ask order
+ * 
+ * @details Search and cancellation logic:
+ * 1. Searches for exact match (username, price, quantity)
+ * 2. If found with larger quantity, reduces the quantity
+ * 3. If found with smaller quantity, rejects cancellation
+ * 4. Removes order completely if quantities match
+ * 
+ * @param Username The username who placed the ask
+ * @param Price The price of the ask to cancel
+ * @param Quantity The quantity to cancel
+ * 
+ * @note 
+ * - Cannot cancel more than existing quantity
+ * - Requires exact match of all parameters
+ * - Prints status messages to console
+ */
 void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
     for (auto it = asks.begin(); it != asks.end(); it++){
         if (it->userName == Username && it->price == Price && it->quantity == Quantity) {
@@ -250,6 +380,24 @@ void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
     }
 }
 
+/**
+ * @brief Retrieves current market quote for buying specified quantity
+ * 
+ * @details Quote generation process:
+ * 1. Sorts ask orders by price (ascending) and time priority
+ * 2. Accumulates available quantities at each price level
+ * 3. Shows all price levels needed to fulfill requested quantity
+ * 
+ * @param qty The quantity of stocks to get quote for
+ * 
+ * @return string "Quote retrieved successfully"
+ * 
+ * @note 
+ * - Shows best available prices first
+ * - May show multiple price levels if single price can't fulfill quantity
+ * - Prints quote details to console
+ * - Does not actually execute any trades
+ */
 string OrderBook::getQuote(int qty) {
     // Implementation of getQuote
     // We will need to find lowest ask prices till the qty passed in is met we keep displaying lowest ask prices
@@ -280,6 +428,25 @@ string OrderBook::getQuote(int qty) {
     return "Quote retrieved successfully.";
 }
 
+/**
+ * @brief Displays the full order book depth (all bids and asks)
+ * 
+ * @details Display format:
+ * 1. Sorts asks by price (descending)
+ * 2. Sorts bids by price (descending)
+ * 3. Shows asks above market (in red)
+ * 4. Shows bids below market (in green)
+ * 5. Each line shows price and quantity
+ * 
+ * @return string Formatted order book depth string
+ * 
+ * @note 
+ * - Uses ANSI color codes for better visibility
+ * - Red for asks (selling)
+ * - Green for bids (buying)
+ * - Shows full depth of market
+ * - Prints to console and returns as string
+ */
 string OrderBook::getDepth() {
     // Sort asks in descending order of price
     sort(asks.begin(), asks.end(), [](const Order &a, const Order &b) { 
@@ -312,6 +479,25 @@ string OrderBook::getDepth() {
     return depthString;
 }
 
+/**
+ * @brief Retrieves and displays all balances for a user
+ * 
+ * @details Balance display:
+ * 1. Checks if user exists
+ * 2. Shows all currency/stock balances
+ * 3. Formats numbers with 2 decimal places
+ * 
+ * @param username The username whose balance to check
+ * 
+ * @return string Status message:
+ *         - "Balance retrieved successfully" if user exists
+ *         - "User {username} does not exist" if not found
+ * 
+ * @note 
+ * - Shows all assets (USD, GOOGL, etc.)
+ * - Uses fixed precision (2 decimals)
+ * - Prints balances to console
+ */
 string OrderBook::getBalance(std::string username) {
     if (users.find(username) != users.end()) {
         cout << "User found" << endl;
@@ -325,6 +511,27 @@ string OrderBook::getBalance(std::string username) {
     }
 }
 
+/**
+ * @brief Adds balance to a user's account for a specific market
+ * 
+ * @details Balance addition process:
+ * 1. Validates user existence
+ * 2. Adds specified value to the market balance
+ * 3. Creates new balance entry if market doesn't exist
+ * 
+ * @param Username The username to add balance to
+ * @param market The market/currency to add (e.g., "USD", "GOOGL")
+ * @param value The amount to add to the balance
+ * 
+ * @return string Status message:
+ *         - "Balance added successfully" if successful
+ *         - "User not found" if user doesn't exist
+ * 
+ * @note 
+ * - Can add both USD and stock balances
+ * - Creates new market balance if not existing
+ * - Prints status message to console
+ */
 string OrderBook::addBalance(std::string Username, std::string market, int value) {
     if (users.find(Username) != users.end()) {
         users[Username].userBalance.addBalances(market, value);
@@ -336,6 +543,28 @@ string OrderBook::addBalance(std::string Username, std::string market, int value
     return "User not found";
 }
 
+/**
+ * @brief Main function implementing the trading platform interface
+ * 
+ * @details Menu options:
+ * 1. Sign Up User - Create new trading account
+ * 2. Add Balance - Add funds/stocks to user account
+ * 3. Check Market Prices - View order book depth
+ * 4. Add Bid - Place buy order
+ * 5. Add Ask - Place sell order
+ * 6. Get Quote - Check price for quantity
+ * 7. Check Balance - View user balances
+ * 8. Cancel Bid - Cancel buy order
+ * 9. Cancel Ask - Cancel sell order
+ * 10. Exit - Close platform
+ * 
+ * @return int Exit status (0 for normal exit)
+ * 
+ * @note 
+ * - Creates initial market makers on startup
+ * - Runs in continuous loop until exit
+ * - Handles all user input validation
+ */
 int main() {
     OrderBook EXCH;
 
@@ -348,8 +577,7 @@ int main() {
     cout << "\n=========== " << "CURRENT MARKET PRICES " << " =========== " << endl;
     EXCH.getDepth(); // getDepth() is called to display the current market
 
-    while (true)
-    {
+    while (true) {
         cout << "\n=========== " << TICKER << " Trading Platform ===========\n\n";
         cout << "\n========== Trading Platform Menu ==========\n";
         cout << "1. Sign Up User\n";
