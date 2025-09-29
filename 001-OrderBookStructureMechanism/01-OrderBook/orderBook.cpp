@@ -87,7 +87,7 @@ OrderBook::OrderBook() {
     bids.push_back(bid6);
 }
 
-std::string OrderBook::makeUser(std::string username) {
+string OrderBook::makeUser(std::string username) {
     User newUser(username);
     if (users.find(username) == users.end()) {
         users[username] = newUser;
@@ -96,7 +96,7 @@ std::string OrderBook::makeUser(std::string username) {
     return "User " + username + " already exists.";
 }
 
-std::string OrderBook::addBid(std::string Username, double Price, int Quantity) {
+string OrderBook::addBid(std::string Username, double Price, int Quantity) {
     /*
         Implementation of adding a BID order to the order book.
 
@@ -156,7 +156,7 @@ std::string OrderBook::addBid(std::string Username, double Price, int Quantity) 
     return "Bid added/satified successfully.";
 }
 
-std::string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
+string OrderBook::addAsk(std::string Username, double Price, int Quantity) {
     // First check if the username exists in the users map
     if (users.find(Username) == users.end()) {
         return "Error: User " + Username + " does not exist.";
@@ -250,15 +250,43 @@ void OrderBook::cancelAsk(std::string Username, double Price, int Quantity) {
     }
 }
 
-std::string OrderBook::getQuote(int qty) {
+string OrderBook::getQuote(int qty) {
     
 }
 
-std::string OrderBook::getDepth() {
-    
+string OrderBook::getDepth() {
+    // Sort asks in descending order of price
+    sort(asks.begin(), asks.end(), [](const Order &a, const Order &b) { 
+        return a.price > b.price; 
+    });
+
+    // Sort bids in descending order of price
+    sort(bids.begin(), bids.end(), [](const Order &a, const Order &b) { 
+        return a.price > b.price; 
+    });
+
+    string depthString = TICKER + " Depth:\n";
+
+    for (const auto &ask : asks) {
+        depthString += "\x1b[31m"; // Set color to red
+        depthString += "Price: " + std::to_string(ask.price) + ", Quantity: " + std::to_string(ask.quantity) + "\n";
+        depthString += "\x1b[0m"; // Reset color to default
+    }
+
+    depthString += "Asks above:\n";
+    depthString += "Bids below:\n";
+
+    for (const auto &bid : bids) {
+        depthString += "\x1b[32m"; // Set color to green
+        depthString += "Price: " + std::to_string(bid.price) + ", Quantity: " + std::to_string(bid.quantity) + "\n";
+        depthString += "\x1b[0m"; // Reset color to default
+    }
+
+    cout << depthString << endl;
+    return depthString;
 }
 
-std::string OrderBook::getBalance(std::string username) {
+string OrderBook::getBalance(std::string username) {
     if (users.find(username) != users.end()) {
         cout << "User found" << endl;
         cout << "User balance is as follows: " << endl;
@@ -271,7 +299,7 @@ std::string OrderBook::getBalance(std::string username) {
     }
 }
 
-std::string OrderBook::addBalance(std::string Username, std::string market, int value) {
+string OrderBook::addBalance(std::string Username, std::string market, int value) {
     if (users.find(Username) != users.end()) {
         users[Username].userBalance.addBalances(market, value);
         cout << "Balance added successfully" << endl;
