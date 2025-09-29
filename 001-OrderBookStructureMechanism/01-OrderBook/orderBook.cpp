@@ -337,6 +337,107 @@ string OrderBook::addBalance(std::string Username, std::string market, int value
 }
 
 int main() {
+    OrderBook EXCH;
+
+    string market;
+    int choice;
+    string username;
+    int price, quantity;
+
     cout << "\n=========== " <<"WELCOME TO THE " << TICKER << " MARKET " << " =========== \n\n" << endl;
+    cout << "\n=========== " << "CURRENT MARKET PRICES " << " =========== " << endl;
+    EXCH.getDepth(); // getDepth() is called to display the current market
+
+    while (true)
+    {
+        cout << "\n=========== " << TICKER << " Trading Platform ===========\n\n";
+        cout << "\n========== Trading Platform Menu ==========\n";
+        cout << "1. Sign Up User\n";
+        cout << "2. Add Balance to User Account\n";
+        cout << "3. Check Current Market Prices\n";
+        cout << "4. Add Bid to " << TICKER << " v USD market\n";
+        cout << "5. Sell your stocks in " << TICKER << " v USD Market\n";
+        cout << "6. Get Current Quote to buy " << TICKER << " stocks\n";
+        cout << "7. Check your current User Balance\n";
+        cout << "8. Cancel Bid\n";
+        cout << "9. Cancel Ask\n";
+        cout << "10. Exit\n\n";
+        cout << "Enter your choice: ";
+
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+                cout << "Enter username for new user: \n";
+                cin >> username;
+                EXCH.makeUser(username);
+                break;
+            case 2:
+                cout << "Enter username to add balance: \n";
+                cin >> username;
+                cout << "Enter market (e.g., USD): \n";
+                cin >> market;
+                cout << "Enter balance value: \n";
+                int value;
+                cin >> value;
+                EXCH.addBalance(username, market, value);
+                break;
+            case 3:
+                EXCH.getDepth();
+                break;
+            case 4:
+                cout << "Enter username for bid: \n";
+                cin >> username;
+                cout << "Enter bid price: \n";
+                cin >> price;
+                cout << "Enter bid quantity: \n";
+                cin >> quantity;
+                EXCH.addBid(username, price, quantity);
+                break;
+            case 5:
+                cout << "Enter username for ask: \n";
+                cin >> username;
+                cout << "Enter ask price: \n";
+                cin >> price;
+                cout << "Enter ask quantity: \n";
+                cin >> quantity;
+                EXCH.addAsk(username, price, quantity);
+                break;
+            case 6:
+                cout << "Enter quantity for quote: \n";
+                cin >> quantity;
+                EXCH.getQuote(quantity);
+                break;
+            case 7:
+                cout << "Enter username to get balance: \n";
+                cin >> username;
+                EXCH.getBalance(username);
+                break;
+            case 8:
+                cout << "Enter username to cancel bid: \n";
+                cin >> username;
+                cout << "Enter bid price: \n";
+                cin >> price;
+                cout << "Enter bid quantity: \n";
+                cin >> quantity;
+                EXCH.cancelBid(username, price, quantity);
+                break;
+            case 9:
+                cout << "Enter username to cancel ask: \n";
+                cin >> username;
+                cout << "Enter ask price: \n";
+                cin >> price;
+                cout << "Enter ask quantity: \n";
+                cin >> quantity;
+                EXCH.cancelAsk(username, price, quantity);
+                break;
+            case 10:
+                cout << "Exiting the trading platform. Goodbye!\n\n";
+                return 0;
+            default:
+                cout << "Invalid choice. Please try again.\n\n";
+        }
+    }
+
     return 0;
 }
