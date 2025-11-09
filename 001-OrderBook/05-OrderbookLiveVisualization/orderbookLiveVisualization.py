@@ -1,4 +1,4 @@
-from dash import Dash, dcc, html, Input, Output, dash_table
+from dash import Dash, dcc, html, Input, Output, dash_table, no_update
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
@@ -39,6 +39,26 @@ app.index_string = '''
             }
             .Select-arrow {
                 border-color: #666 transparent transparent !important;
+            }
+            
+            @keyframes flash-red {
+                0% { background-color: rgba(255, 59, 59, 0) }
+                50% { background-color: rgba(255, 59, 59, 0.3) }
+                100% { background-color: rgba(255, 59, 59, 0) }
+            }
+            
+            @keyframes flash-green {
+                0% { background-color: rgba(59, 255, 59, 0) }
+                50% { background-color: rgba(59, 255, 59, 0.3) }
+                100% { background-color: rgba(59, 255, 59, 0) }
+            }
+            
+            .flash-red {
+                animation: flash-red 0.5s ease;
+            }
+            
+            .flash-green {
+                animation: flash-green 0.5s ease;
             }
         </style>
     </head>
@@ -86,7 +106,7 @@ def aggregate_orderbook_levels(levels_df, side, agg_level = Decimal('0.1')):
 
     return levels_df
 
-def fetch_orderbook_data(symbol: str, limit: int):
+def fetch_orderbook_data(symbol: str, limit: int, agg_level: Decimal = Decimal('0.1')):
     url = "https://api.binance.com/api/v3/depth"
     params = {
         "symbol": symbol.upper(),  # Ensure symbol is uppercase for Binance API
@@ -101,14 +121,20 @@ def fetch_orderbook_data(symbol: str, limit: int):
         # Process asks
         asks = pd.DataFrame(data['asks'], columns=['price', 'quantity'], dtype=float)
         asks['side'] = 'ask'
+        # Aggregate asks
+        asks = aggregate_orderbook_levels(asks, side='ask', agg_level=agg_level)
         asks = asks.sort_values(by='price', ascending=True)  # Ascending for asks
+        asks = asks.head(10)  # Take top 10 levels
 
         # Process bids
         bids = pd.DataFrame(data['bids'], columns=['price', 'quantity'], dtype=float)
         bids['side'] = 'bid'
+        # Aggregate bids
+        bids = aggregate_orderbook_levels(bids, side='bid', agg_level=agg_level)
         bids = bids.sort_values(by='price', ascending=False)  # Descending for bids
+        bids = bids.head(10)  # Take top 10 levels
 
-        # Process mid_price
+        # Calculate mid_price from aggregated levels
         mid_price = (bids['price'].iloc[0] + asks['price'].iloc[-1]) / 2
 
         return asks, bids, mid_price
@@ -119,12 +145,19 @@ def fetch_orderbook_data(symbol: str, limit: int):
         empty_df = pd.DataFrame(columns=['price', 'quantity', 'side'])
         return empty_df, empty_df
 
+# Store previous state for flash effects
+previous_asks = pd.DataFrame()
+previous_bids = pd.DataFrame()
+
 # Dash DataTable properties
-def make_table(df: pd.DataFrame, color: str):
+def make_table(df: pd.DataFrame, color: str, is_ask=True):
     """
     Create styled DataTable for asks (red) or bids (green)
     """
+    global previous_asks, previous_bids
+    
     df = df.round(3)
+    previous_df = previous_asks if is_ask else previous_bids
     
     # Calculate cumulative quantity for depth visualization
     df['cumulative_quantity'] = df['quantity'].cumsum()
@@ -137,11 +170,40 @@ def make_table(df: pd.DataFrame, color: str):
         alpha = 0.1 + 0.4 * pct  # opacity by depth
         bg_color = f'rgba(255,0,0,{alpha})' if color == 'red' else f'rgba(0,255,0,{alpha})'
         text_color = '#ff6b6b' if color == 'red' else '#00ff99'
-        style_data_conditional += [
-            {'if': {'row_index': i}, 'backgroundColor': bg_color},
-            {'if': {'row_index': i, 'column_id': 'price'}, 'color': text_color, 'fontWeight': '600'},
-            {'if': {'row_index': i, 'column_id': 'quantity'}, 'color': 'white'},
-        ]
+        
+        # Base styles for each row
+        row_style = {
+            'if': {'row_index': i},
+            'backgroundColor': bg_color,
+            'color': 'white'  # Default text color for the row
+        }
+        
+        # Price column specific style
+        price_style = {
+            'if': {'row_index': i, 'column_id': 'price'},
+            'color': text_color,
+            'fontWeight': '600'
+        }
+        
+        # Add styles to conditional list
+        style_data_conditional.extend([row_style, price_style])
+        
+        # Add flash effect for changed values
+        if not previous_df.empty and i < len(previous_df):
+            try:
+                prev_price = float(previous_df.iloc[i]['price'])
+                prev_qty = float(previous_df.iloc[i]['quantity'])
+                curr_price = float(row['price'])
+                curr_qty = float(row['quantity'])
+                
+                if prev_price != curr_price or prev_qty != curr_qty:
+                    flash_class = 'flash-red' if is_ask else 'flash-green'
+                    style_data_conditional.append({
+                        'if': {'row_index': i},
+                        'animation': flash_class
+                    })
+            except (ValueError, IndexError):
+                continue  # Skip if conversion fails or index out of range
 
     # Drop cumulative quantity before creating table
     df = df[['price', 'quantity']]
@@ -215,9 +277,15 @@ def dropdown_option(title, options, default_value, _id):
 # initial fetch for first render
 initial_symbol = "SOLUSDT"
 initial_agg_level = Decimal("0.1")
-raw_asks, raw_bids, initial_mid_price = fetch_orderbook_data(symbol=initial_symbol, limit=100)
-asks_df = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=initial_agg_level).head(10)
-bids_df = aggregate_orderbook_levels(raw_bids, side='bid', agg_level=initial_agg_level).head(10)
+asks_df, bids_df, initial_mid_price = fetch_orderbook_data(
+    symbol=initial_symbol, 
+    limit=100,
+    agg_level=initial_agg_level
+)
+
+# Initialize previous state
+previous_asks = asks_df.copy()
+previous_bids = bids_df.copy()
 
 # LAYOUT (centered, card) 
 app.layout = html.Div(
@@ -272,7 +340,7 @@ app.layout = html.Div(
                     ),
                     html.Div(
                         id='mid-price-value',
-                        children=f"${initial_mid_price:,.2f}",
+                        children=f"{initial_mid_price:,.2f}",
                         style={
                             'color': '#ffffff',
                             'fontWeight': '700',
@@ -371,6 +439,9 @@ app.layout = html.Div(
     prevent_initial_call=False  # Allow initial callback
 )
 def update_tables(agg_level, symbol, n_intervals, n_clicks):
+    if None in [agg_level, symbol]:
+        return no_update
+
     try:
         # Convert aggregation level from string to Decimal
         agg_level = Decimal(str(agg_level))
@@ -379,11 +450,15 @@ def update_tables(agg_level, symbol, n_intervals, n_clicks):
         base_quote = symbol.replace("USDT", "/USDT")
         title = f"{base_quote} Order Book"
         
-        # Fetch fresh orderbook data with selected symbol
-        raw_asks, raw_bids, mid_price = fetch_orderbook_data(symbol=symbol, limit=100)
+        # Fetch fresh orderbook data with selected symbol and aggregation level
+        asks, bids, mid_price = fetch_orderbook_data(
+            symbol=symbol, 
+            limit=100,
+            agg_level=agg_level
+        )
         
-        # Format mid price with dollar sign
-        mid_price_display = f"${mid_price:,.2f}"
+        # Format mid price
+        mid_price_display = f"{mid_price:,.2f}"
         
         # Style for mid price (default style with potential animation)
         mid_price_style = {
@@ -395,17 +470,14 @@ def update_tables(agg_level, symbol, n_intervals, n_clicks):
             'transition': 'color 0.3s ease'
         }
         
-        # Re-aggregate with selected aggregation level
-        asks = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=agg_level)
-        bids = aggregate_orderbook_levels(raw_bids, side='bid', agg_level=agg_level)
+        # Create tables with updated data and flash effects
+        asks_table = make_table(asks, 'red', is_ask=True)
+        bids_table = make_table(bids, 'green', is_ask=False)
         
-        # Take top 10 levels for each
-        asks = asks.head(10)
-        bids = bids.head(10)
-        
-        # Create tables with updated data
-        asks_table = make_table(asks, 'red')
-        bids_table = make_table(bids, 'green')
+        # Update previous state for next comparison
+        global previous_asks, previous_bids
+        previous_asks = asks.copy()
+        previous_bids = bids.copy()
         
         return title, mid_price_display, mid_price_style, asks_table, bids_table
         
