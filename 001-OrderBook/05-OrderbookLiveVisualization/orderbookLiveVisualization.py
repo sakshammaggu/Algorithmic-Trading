@@ -9,8 +9,42 @@ from decimal import Decimal
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
 
+def aggregate_orderbook_levels(levels_df, side, agg_level = Decimal('0.1')):
+    if side == 'bid':
+        right = False
+        lambda_func =  lambda x: x.left
+    elif side == 'ask':
+        right = True
+        lambda_func = lambda x: x.right
+
+    min_level = math.floor(Decimal(min(levels_df['price'])) / agg_level - 1) * agg_level
+    max_level = math.ceil(Decimal(max(levels_df['price'])) / agg_level + 1) * agg_level
+
+    level_bounds = [float(min_level + agg_level * i)
+        for i in range(int((max_level - min_level) / agg_level) + 1)
+    ]
+
+    levels_df["bin"] = pd.cut(
+        levels_df['price'],
+        bins=level_bounds,
+        right=right,
+        precision=10
+    )
+
+    levels_df = levels_df.groupby("bin").agg(
+        quantity = ("quantity", "sum")
+    ).reset_index()
+    
+    levels_df['price'] = levels_df['bin'].apply(lambda_func)
+
+    levels_df = levels_df[levels_df['quantity'] > 0]
+    levels_df = levels_df[['price', 'quantity']]
+
+    return levels_df
+
 def fetch_orderbook_data(symbol: str, limit: int):
     url = "https://api.binance.com/api/v3/depth"
+    levels_to_show = 10
     params = {
         "symbol": symbol,
         "limit": limit
@@ -21,9 +55,16 @@ def fetch_orderbook_data(symbol: str, limit: int):
     data = response.json()
 
     asks = pd.DataFrame(data['asks'], columns=['price', 'quantity'], dtype=float).sort_values(by='price', ascending=False)
-    bids = pd.DataFrame(data['bids'], columns=['price', 'quantity'], dtype=float).sort_values(by='price', ascending=False)
+    asks['side'] = 'ask'
+    asks = aggregate_orderbook_levels(asks, side='ask')
+    asks = asks.iloc[:levels_to_show]
 
-    return asks, bids
+    bids = pd.DataFrame(data['bids'], columns=['price', 'quantity'], dtype=float).sort_values(by='price', ascending=False)
+    bids['side'] = 'bid'
+    bids = aggregate_orderbook_levels(bids, side='bid')
+    bids = bids.iloc[:levels_to_show]
+
+    return asks, bids 
 
 # Dash DataTable properties
 def make_table(df: pd.DataFrame, color: str):
@@ -31,11 +72,15 @@ def make_table(df: pd.DataFrame, color: str):
     Create styled DataTable for asks (red) or bids (green)
     """
     df = df.round(3)
-    max_qty = df['quantity'].max() if not df.empty else 1
-
+    
+    # Calculate cumulative quantity for depth visualization
+    df['cumulative_quantity'] = df['quantity'].cumsum()
+    max_cumul_qty = df['cumulative_quantity'].max() if not df.empty else 1
+    
     style_data_conditional = []
     for i, row in df.iterrows():
-        pct = row['quantity'] / max_qty
+        # Use cumulative quantity for depth effect
+        pct = row['cumulative_quantity'] / max_cumul_qty
         alpha = 0.1 + 0.4 * pct  # opacity by depth
         bg_color = f'rgba(255,0,0,{alpha})' if color == 'red' else f'rgba(0,255,0,{alpha})'
         text_color = '#ff6b6b' if color == 'red' else '#00ff99'
@@ -45,30 +90,47 @@ def make_table(df: pd.DataFrame, color: str):
             {'if': {'row_index': i, 'column_id': 'quantity'}, 'color': 'white'},
         ]
 
+    # Drop cumulative quantity before creating table
+    df = df[['price', 'quantity']]
+    
+    # Format numbers with appropriate precision
+    df['price'] = df['price'].apply(lambda x: f"{x:.2f}")
+    df['quantity'] = df['quantity'].apply(lambda x: f"{x:.4f}")
+    
     return dash_table.DataTable(
         columns=[
-            {"name": "price", "id": "price", "type": "numeric"},
-            {"name": "quantity", "id": "quantity", "type": "numeric"},
+            {"name": "Price", "id": "price"},
+            {"name": "Size", "id": "quantity"},
         ],
         data=df.to_dict('records'),
         style_as_list_view=True,
         style_cell={
             'backgroundColor': '#0c0c0c',
             'fontFamily': 'monospace',
-            'fontSize': '14px',
+            'fontSize': '13px',
             'border': 'none',
             'textAlign': 'right',
-            'padding': '5px',
+            'padding': '6px 8px',
+            'letterSpacing': '0.4px',
         },
-        style_header={'display': 'none'},
+        style_header={
+            'backgroundColor': '#0c0c0c',
+            'color': '#666',
+            'fontWeight': 'bold',
+            'fontSize': '12px',
+            'textTransform': 'uppercase',
+            'letterSpacing': '1px',
+            'borderBottom': '1px solid #222',
+            'paddingBottom': '8px',
+        },
         style_data_conditional=style_data_conditional,
         page_action='none',
-        fixed_rows={'headers': False},
-        style_table={'width': '100%', 'maxHeight': '220px', 'overflowY': 'auto'},
+        fixed_rows={'headers': True},
+        style_table={'width': '100%', 'maxHeight': '300px', 'overflowY': 'auto'},
     )
 
 # initial fetch for first render
-asks_df, bids_df = fetch_orderbook_data(symbol="SOLUSDT", limit=10)
+asks_df, bids_df = fetch_orderbook_data(symbol="SOLUSDT", limit=100)
 
 # LAYOUT (centered, card) 
 app.layout = html.Div(
@@ -152,7 +214,7 @@ app.layout = html.Div(
     Input("refresh", "n_clicks"),   # keep manual refresh as optional trigger as well
 )
 def update_tables(n_intervals, n_clicks):
-    asks, bids = fetch_orderbook_data(symbol="SOLUSDT", limit=10)   # fetch returns asks, bids
+    asks, bids = fetch_orderbook_data(symbol="SOLUSDT", limit=100)   # fetch returns asks, bids
     asks_table = make_table(asks, 'red')
     bids_table = make_table(bids, 'green')
     return asks_table, bids_table
