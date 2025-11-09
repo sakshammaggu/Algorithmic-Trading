@@ -9,6 +9,50 @@ from decimal import Decimal
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
 
+# Add custom CSS for dropdowns
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .dropdown-dark .Select-control {
+                background-color: #0c0c0c !important;
+                border-color: #333 !important;
+            }
+            .dropdown-dark .Select-menu-outer {
+                background-color: #0c0c0c !important;
+                border-color: #333 !important;
+            }
+            .dropdown-dark .Select-value-label {
+                color: #fff !important;
+            }
+            .dropdown-dark .Select-option {
+                background-color: #0c0c0c !important;
+                color: #fff !important;
+            }
+            .dropdown-dark .Select-option:hover {
+                background-color: #1a1a1a !important;
+            }
+            .Select-arrow {
+                border-color: #666 transparent transparent !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
 def aggregate_orderbook_levels(levels_df, side, agg_level = Decimal('0.1')):
     if side == 'bid':
         right = False
@@ -44,27 +88,33 @@ def aggregate_orderbook_levels(levels_df, side, agg_level = Decimal('0.1')):
 
 def fetch_orderbook_data(symbol: str, limit: int):
     url = "https://api.binance.com/api/v3/depth"
-    levels_to_show = 10
     params = {
-        "symbol": symbol,
+        "symbol": symbol.upper(),  # Ensure symbol is uppercase for Binance API
         "limit": limit
     }
 
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
 
-    asks = pd.DataFrame(data['asks'], columns=['price', 'quantity'], dtype=float).sort_values(by='price', ascending=False)
-    asks['side'] = 'ask'
-    asks = aggregate_orderbook_levels(asks, side='ask')
-    asks = asks.iloc[:levels_to_show]
+        # Process asks
+        asks = pd.DataFrame(data['asks'], columns=['price', 'quantity'], dtype=float)
+        asks['side'] = 'ask'
+        asks = asks.sort_values(by='price', ascending=True)  # Ascending for asks
 
-    bids = pd.DataFrame(data['bids'], columns=['price', 'quantity'], dtype=float).sort_values(by='price', ascending=False)
-    bids['side'] = 'bid'
-    bids = aggregate_orderbook_levels(bids, side='bid')
-    bids = bids.iloc[:levels_to_show]
+        # Process bids
+        bids = pd.DataFrame(data['bids'], columns=['price', 'quantity'], dtype=float)
+        bids['side'] = 'bid'
+        bids = bids.sort_values(by='price', ascending=False)  # Descending for bids
 
-    return asks, bids 
+        return asks, bids
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching orderbook: {e}")
+        # Return empty DataFrames with correct columns if there's an error
+        empty_df = pd.DataFrame(columns=['price', 'quantity', 'side'])
+        return empty_df, empty_df
 
 # Dash DataTable properties
 def make_table(df: pd.DataFrame, color: str):
@@ -129,8 +179,42 @@ def make_table(df: pd.DataFrame, color: str):
         style_table={'width': '100%', 'maxHeight': '300px', 'overflowY': 'auto'},
     )
 
+def dropdown_option(title, options, default_value, _id):
+    return html.Div(
+        style={
+            "marginLeft": "20px",
+            "width": "180px"
+        },
+        children=[
+            html.H4(
+                title,
+                style={
+                    "color": "#9aa0a6",
+                    "fontSize": "14px",
+                    "fontWeight": "600",
+                    "marginBottom": "8px",
+                    "textAlign": "left"
+                }
+            ),
+            dcc.Dropdown(
+                options=options,
+                value=default_value,
+                id=_id,
+                style={
+                    "backgroundColor": "#0c0c0c",
+                    "color": "#ffffff",
+                },
+                className="dropdown-dark"
+            )
+        ]
+    )
+
 # initial fetch for first render
-asks_df, bids_df = fetch_orderbook_data(symbol="SOLUSDT", limit=100)
+initial_symbol = "SOLUSDT"
+initial_agg_level = Decimal("0.1")
+raw_asks, raw_bids = fetch_orderbook_data(symbol=initial_symbol, limit=100)
+asks_df = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=initial_agg_level).head(10)
+bids_df = aggregate_orderbook_levels(raw_bids, side='bid', agg_level=initial_agg_level).head(10)
 
 # LAYOUT (centered, card) 
 app.layout = html.Div(
@@ -155,7 +239,8 @@ app.layout = html.Div(
             },
             children=[
                 html.H4(
-                    "SOL/USDT Order Book",
+                    id='orderbook-title',
+                    children="SOL/USDT Order Book",  # Initial value
                     style={
                         "marginBottom": "12px",
                         "fontWeight": "700",
@@ -202,22 +287,92 @@ app.layout = html.Div(
                     }
                 ),
             ]
-        )
+        ),
+
+        # Dropdown options
+        html.Div(
+            style={
+                "display": "flex",
+                "justifyContent": "flex-start",
+                "alignItems": "center",
+                "marginTop": "20px",
+                "backgroundColor": "#0f0f10",
+                "padding": "15px",
+                "borderRadius": "12px",
+                "boxShadow": "0 4px 20px rgba(0,0,0,0.4)",
+                "border": "1px solid rgba(255,255,255,0.04)"
+            },
+            children=[
+                dropdown_option(
+                    title="Aggregation Level",
+                    options=[
+                        {"label": "0.01", "value": "0.01"},
+                        {"label": "0.1", "value": "0.1"},
+                        {"label": "1.0", "value": "1"},
+                        {"label": "10.0", "value": "10"},
+                        {"label": "100.0", "value": "100"}
+                    ],
+                    default_value="0.1",
+                    _id="aggregation_level"
+                ),
+                dropdown_option(
+                    title="Trading Pair",
+                    options=[
+                        {"label": "SOL/USDT", "value": "SOLUSDT"},
+                        {"label": "ETH/USDT", "value": "ETHUSDT"},
+                        {"label": "UNI/USDT", "value": "UNIUSDT"},
+                        {"label": "BTC/USDT", "value": "BTCUSDT"}
+                    ],
+                    default_value="SOLUSDT",
+                    _id="symbol_value"
+                )
+            ]
+        ),
     ]
 )
 
 # CALLBACK: auto-refresh every 2s 
 @app.callback(
+    Output('orderbook-title', 'children'),
     Output('asks-table', 'children'),
     Output('bids-table', 'children'),
+    Input('aggregation_level', 'value'),
+    Input('symbol_value', 'value'),
     Input("auto-refresh", "n_intervals"),
     Input("refresh", "n_clicks"),   # keep manual refresh as optional trigger as well
+    prevent_initial_call=False  # Allow initial callback
 )
-def update_tables(n_intervals, n_clicks):
-    asks, bids = fetch_orderbook_data(symbol="SOLUSDT", limit=100)   # fetch returns asks, bids
-    asks_table = make_table(asks, 'red')
-    bids_table = make_table(bids, 'green')
-    return asks_table, bids_table
+def update_tables(agg_level, symbol, n_intervals, n_clicks):
+    try:
+        # Convert aggregation level from string to Decimal
+        agg_level = Decimal(str(agg_level))
+        
+        # Format title (e.g., "BTC/USDT" from "BTCUSDT")
+        base_quote = symbol.replace("USDT", "/USDT")
+        title = f"{base_quote} Order Book"
+        
+        # Fetch fresh orderbook data with selected symbol
+        raw_asks, raw_bids = fetch_orderbook_data(symbol=symbol, limit=100)
+        
+        # Re-aggregate with selected aggregation level
+        asks = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=agg_level)
+        bids = aggregate_orderbook_levels(raw_bids, side='bid', agg_level=agg_level)
+        
+        # Take top 10 levels for each
+        asks = asks.head(10)
+        bids = bids.head(10)
+        
+        # Create tables with updated data
+        asks_table = make_table(asks, 'red')
+        bids_table = make_table(bids, 'green')
+        
+        return title, asks_table, bids_table
+        
+    except Exception as e:
+        print(f"Error updating tables: {e}")
+        # Return empty tables in case of error
+        empty_df = pd.DataFrame(columns=['price', 'quantity'])
+        return make_table(empty_df, 'red'), make_table(empty_df, 'green')
 
 if __name__ == '__main__':
     app.run(debug=True)
