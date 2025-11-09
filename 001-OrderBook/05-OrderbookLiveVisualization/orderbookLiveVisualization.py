@@ -108,7 +108,10 @@ def fetch_orderbook_data(symbol: str, limit: int):
         bids['side'] = 'bid'
         bids = bids.sort_values(by='price', ascending=False)  # Descending for bids
 
-        return asks, bids
+        # Process mid_price
+        mid_price = (bids['price'].iloc[0] + asks['price'].iloc[-1]) / 2
+
+        return asks, bids, mid_price
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching orderbook: {e}")
@@ -212,7 +215,7 @@ def dropdown_option(title, options, default_value, _id):
 # initial fetch for first render
 initial_symbol = "SOLUSDT"
 initial_agg_level = Decimal("0.1")
-raw_asks, raw_bids = fetch_orderbook_data(symbol=initial_symbol, limit=100)
+raw_asks, raw_bids, initial_mid_price = fetch_orderbook_data(symbol=initial_symbol, limit=100)
 asks_df = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=initial_agg_level).head(10)
 bids_df = aggregate_orderbook_levels(raw_bids, side='bid', agg_level=initial_agg_level).head(10)
 
@@ -254,16 +257,39 @@ app.layout = html.Div(
                 # ASKS (container with id so callback can update)
                 html.Div(id='asks-table', children=[make_table(asks_df, 'red')]),
 
-                html.Div(
-                    "Middle Price",
-                    style={
-                        'textAlign': 'center',
-                        'color': '#9aa0a6',
-                        'margin': '10px 0',
-                        'fontWeight': '700',
-                        'fontSize': '14px'
-                    }
-                ),
+                # Middle price container
+                html.Div([
+                    html.Div(
+                        "Middle Price",
+                        style={
+                            'color': '#9aa0a6',
+                            'fontWeight': '600',
+                            'fontSize': '12px',
+                            'textTransform': 'uppercase',
+                            'letterSpacing': '1px',
+                            'marginBottom': '4px'
+                        }
+                    ),
+                    html.Div(
+                        id='mid-price-value',
+                        children=f"${initial_mid_price:,.2f}",
+                        style={
+                            'color': '#ffffff',
+                            'fontWeight': '700',
+                            'fontSize': '18px',
+                            'fontFamily': 'monospace',
+                            'letterSpacing': '0.5px'
+                        }
+                    )
+                ],
+                style={
+                    'textAlign': 'center',
+                    'margin': '15px 0',
+                    'padding': '10px',
+                    'backgroundColor': '#0c0c0c',
+                    'borderRadius': '8px',
+                    'border': '1px solid rgba(255,255,255,0.04)'
+                }),
 
                 # BIDS
                 html.Div(id='bids-table', children=[make_table(bids_df, 'green')]),
@@ -334,6 +360,8 @@ app.layout = html.Div(
 # CALLBACK: auto-refresh every 2s 
 @app.callback(
     Output('orderbook-title', 'children'),
+    Output('mid-price-value', 'children'),
+    Output('mid-price-value', 'style'),
     Output('asks-table', 'children'),
     Output('bids-table', 'children'),
     Input('aggregation_level', 'value'),
@@ -352,7 +380,20 @@ def update_tables(agg_level, symbol, n_intervals, n_clicks):
         title = f"{base_quote} Order Book"
         
         # Fetch fresh orderbook data with selected symbol
-        raw_asks, raw_bids = fetch_orderbook_data(symbol=symbol, limit=100)
+        raw_asks, raw_bids, mid_price = fetch_orderbook_data(symbol=symbol, limit=100)
+        
+        # Format mid price with dollar sign
+        mid_price_display = f"${mid_price:,.2f}"
+        
+        # Style for mid price (default style with potential animation)
+        mid_price_style = {
+            'color': '#ffffff',
+            'fontWeight': '700',
+            'fontSize': '18px',
+            'fontFamily': 'monospace',
+            'letterSpacing': '0.5px',
+            'transition': 'color 0.3s ease'
+        }
         
         # Re-aggregate with selected aggregation level
         asks = aggregate_orderbook_levels(raw_asks, side='ask', agg_level=agg_level)
@@ -366,13 +407,26 @@ def update_tables(agg_level, symbol, n_intervals, n_clicks):
         asks_table = make_table(asks, 'red')
         bids_table = make_table(bids, 'green')
         
-        return title, asks_table, bids_table
+        return title, mid_price_display, mid_price_style, asks_table, bids_table
         
     except Exception as e:
         print(f"Error updating tables: {e}")
-        # Return empty tables in case of error
+        # Return empty/error state for all components
         empty_df = pd.DataFrame(columns=['price', 'quantity'])
-        return make_table(empty_df, 'red'), make_table(empty_df, 'green')
+        error_style = {
+            'color': '#ff6b6b',
+            'fontWeight': '700',
+            'fontSize': '18px',
+            'fontFamily': 'monospace',
+            'letterSpacing': '0.5px',
+        }
+        return (
+            "Error",  # title
+            "N/A",   # mid price display
+            error_style,  # mid price style
+            make_table(empty_df, 'red'),  # asks table
+            make_table(empty_df, 'green')  # bids table
+        )
 
 if __name__ == '__main__':
     app.run(debug=True)
